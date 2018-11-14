@@ -22,7 +22,7 @@ const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 const safePostCssParser = require('postcss-safe-parser');
 const ManifestPlugin = require('webpack-manifest-plugin');
 const InterpolateHtmlPlugin = require('react-dev-utils/InterpolateHtmlPlugin');
-const WorkboxWebpackPlugin = require('workbox-webpack-plugin');
+// const WorkboxWebpackPlugin = require('workbox-webpack-plugin');
 const WatchMissingNodeModulesPlugin = require('react-dev-utils/WatchMissingNodeModulesPlugin');
 const ModuleScopePlugin = require('react-dev-utils/ModuleScopePlugin');
 const getCSSModuleLocalIdent = require('react-dev-utils/getCSSModuleLocalIdent');
@@ -123,7 +123,7 @@ module.exports = function(webpackEnv) {
     return loaders;
   };
 
-  return {
+  const originalConfig = {
     mode: isEnvProduction ? 'production' : isEnvDevelopment && 'development',
     // Stop compilation early in production
     bail: isEnvProduction,
@@ -597,22 +597,6 @@ module.exports = function(webpackEnv) {
       // https://github.com/jmblog/how-to-optimize-momentjs-with-webpack
       // You can remove this if you don't use Moment.js:
       new webpack.IgnorePlugin(/^\.\/locale$/, /moment$/),
-      // Generate a service worker script that will precache, and keep up to date,
-      // the HTML & assets that are part of the Webpack build.
-      isEnvProduction &&
-        new WorkboxWebpackPlugin.GenerateSW({
-          clientsClaim: true,
-          exclude: [/\.map$/, /asset-manifest\.json$/],
-          importWorkboxFrom: 'cdn',
-          navigateFallback: publicUrl + '/index.html',
-          navigateFallbackBlacklist: [
-            // Exclude URLs starting with /_, as they're likely an API call
-            new RegExp('^/_'),
-            // Exclude URLs containing a dot, as they're likely a resource in
-            // public/ and not a SPA route
-            new RegExp('/[^/]+\\.[^/]+$'),
-          ],
-        }),
       // TypeScript type checking
       useTypeScript &&
         new ForkTsCheckerWebpackPlugin({
@@ -656,4 +640,24 @@ module.exports = function(webpackEnv) {
     // our own hints via the FileSizeReporter
     performance: false,
   };
-};
+
+  const serviceWorkerConfig = {
+    target: "webworker",
+    mode: originalConfig.mode,
+    bail: originalConfig.bail,
+    devtool: originalConfig.devtool,
+    entry: {"service-worker": paths.appServiceWorkerJs},
+    output: {
+      path: originalConfig.output.path,
+      pathinfo: originalConfig.output.pathinfo,
+      filename: "static/js/service-worker.js",
+      publicPath: originalConfig.output.publicPath,
+      devtoolModuleFilenameTemplate: originalConfig.output.devtoolModuleFilenameTemplate,
+    },
+    resolve: originalConfig.resolve,
+    resolveLoader: originalConfig.resolveLoader,
+    module: originalConfig.module,
+  };
+
+  return [originalConfig, serviceWorkerConfig];
+}
