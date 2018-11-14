@@ -1,8 +1,7 @@
 {
-  "name": "react-dev-utils",
-  "version": "60101.0",
+  "name": "@ouihelp/react-dev-utils",
+  "version": "60101.0.3",
   "description": "Webpack utilities used by Create React App",
-  "repository": "ouihelp/create-react-app",
   "license": "MIT",
   "engines": {
     "node": ">=6"
