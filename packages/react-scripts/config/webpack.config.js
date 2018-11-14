@@ -649,9 +649,13 @@ module.exports = function(webpackEnv) {
     output: {
       path: originalConfig.output.path,
       pathinfo: originalConfig.output.pathinfo,
-      filename: "static/js/service-worker.js",
+      filename: "sw.js",
       publicPath: originalConfig.output.publicPath,
       devtoolModuleFilenameTemplate: originalConfig.output.devtoolModuleFilenameTemplate,
+    },
+    optimization: {
+      minimize: originalConfig.optimization.minimize,
+      minimizer: originalConfig.optimization.minimizer,
     },
     resolve: originalConfig.resolve,
     resolveLoader: originalConfig.resolveLoader,
