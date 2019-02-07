@@ -15,10 +15,9 @@ const ignoredFiles = require('react-dev-utils/ignoredFiles');
 const paths = require('./paths');
 const fs = require('fs');
 
-const protocol = process.env.HTTPS === 'true' ? 'https' : 'http';
 const host = process.env.HOST || '0.0.0.0';
 
-module.exports = function(proxy, allowedHost) {
+module.exports = function(proxy, allowedHost, httpsSettings) {
   return {
     // WebpackDevServer 2.4.3 introduced a security fix that prevents remote
     // websites from potentially accessing local content through DNS rebinding:
@@ -80,7 +79,7 @@ module.exports = function(proxy, allowedHost) {
       ignored: ignoredFiles(paths.appSrc),
     },
     // Enable HTTPS if the HTTPS environment variable is set to 'true'
-    https: protocol === 'https',
+    https: httpsSettings,
     host,
     overlay: false,
     historyApiFallback: {
