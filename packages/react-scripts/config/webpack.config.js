@@ -680,5 +680,6 @@ module.exports = function(webpackEnv) {
     module: originalConfig.module,
   };
 
-  return [originalConfig, serviceWorkerConfig];
+  // return [originalConfig, serviceWorkerConfig];
+  return [originalConfig];
 };

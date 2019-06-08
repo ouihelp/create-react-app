@@ -81,7 +81,7 @@ module.exports = {
   appPublic: resolveApp('public'),
   appHtml: resolveApp('public/index.html'),
   appIndexJs: resolveModule(resolveApp, 'src/index'),
-  appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker/index'),
+  appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker.entry'),
   appPackageJson: resolveApp('package.json'),
   appSrc: resolveApp('src'),
   appTsConfig: resolveApp('tsconfig.json'),
@@ -105,7 +105,7 @@ module.exports = {
   appPublic: resolveApp('public'),
   appHtml: resolveApp('public/index.html'),
   appIndexJs: resolveModule(resolveApp, 'src/index'),
-  appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker/index'),
+  appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker.entry'),
   appPackageJson: resolveApp('package.json'),
   appSrc: resolveApp('src'),
   appTsConfig: resolveApp('tsconfig.json'),
@@ -142,8 +142,8 @@ if (
     appHtml: resolveOwn('template/public/index.html'),
     appIndexJs: resolveModule(resolveOwn, 'template/src/index'),
     appServiceWorkerJs: resolveModule(
-      resolveApp,
-      'template/src/service-worker/index'
+      resolveOwn,
+      'template/src/service-worker.entry'
     ),
     appPackageJson: resolveOwn('package.json'),
     appSrc: resolveOwn('template/src'),
