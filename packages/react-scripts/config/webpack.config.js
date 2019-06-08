@@ -678,8 +678,36 @@ module.exports = function(webpackEnv) {
     resolve: originalConfig.resolve,
     resolveLoader: originalConfig.resolveLoader,
     module: originalConfig.module,
+    plugins: [
+      useTypeScript &&
+        new ForkTsCheckerWebpackPlugin({
+          typescript: resolve.sync('typescript', {
+            basedir: paths.appNodeModules,
+          }),
+          async: isEnvDevelopment,
+          useTypescriptIncrementalApi: true,
+          checkSyntacticErrors: true,
+          resolveModuleNameModule: process.versions.pnp
+            ? `${__dirname}/pnpTs.js`
+            : undefined,
+          resolveTypeReferenceDirectiveModule: process.versions.pnp
+            ? `${__dirname}/pnpTs.js`
+            : undefined,
+          tsconfig: paths.appTsConfig,
+          reportFiles: [
+            '**',
+            '!**/__tests__/**',
+            '!**/?(*.)(spec|test).*',
+            '!**/src/setupProxy.*',
+            '!**/src/setupTests.*',
+          ],
+          watch: paths.appSrc,
+          silent: true,
+          // The formatter is invoked directly in WebpackDevServerUtils during development
+          formatter: isEnvProduction ? typescriptFormatter : undefined,
+        }),
+    ].filter(Boolean),
   };
 
-  // return [originalConfig, serviceWorkerConfig];
-  return [originalConfig];
+  return [originalConfig, serviceWorkerConfig];
 };

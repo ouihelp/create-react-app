@@ -1,6 +1,6 @@
 {
   "name": "@ouihelp/react-dev-utils",
-  "version": "900010.0.0",
+  "version": "900010.0.9",
   "description": "Webpack utilities used by Create React App",
   "repository": {
     "type": "git",

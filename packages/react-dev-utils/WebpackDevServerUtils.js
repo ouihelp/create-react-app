@@ -112,9 +112,9 @@ function createCompiler({
 }) {
   // "Compiler" is a low-level interface to Webpack.
   // It lets us listen to some events and provide our own custom messages.
-  let compiler;
+  let masterCompiler;
   try {
-    compiler = webpack(config);
+    masterCompiler = webpack(config);
   } catch (err) {
     console.log(chalk.red('Failed to compile.'));
     console.log();
@@ -127,7 +127,7 @@ function createCompiler({
   // recompiling a bundle. WebpackDevServer takes care to pause serving the
   // bundle, so if you refresh, it'll wait instead of serving the old one.
   // "invalid" is short for "bundle invalidated", it doesn't imply any errors.
-  compiler.hooks.invalid.tap('invalid', () => {
+  masterCompiler.hooks.invalid.tap('invalid', () => {
     if (isInteractive) {
       clearConsole();
     }
@@ -135,38 +135,52 @@ function createCompiler({
   });
 
   let isFirstCompile = true;
-  let tsMessagesPromise;
-  let tsMessagesResolver;
+  let tsMessagesPromises = [];
 
-  if (useTypeScript) {
-    compiler.hooks.beforeCompile.tap('beforeCompile', () => {
-      tsMessagesPromise = new Promise(resolve => {
-        tsMessagesResolver = msgs => resolve(msgs);
-      });
-    });
+  masterCompiler.compilers.forEach((compiler, compilerIndex) => {
+    let tsMessagesResolver;
 
-    forkTsCheckerWebpackPlugin
-      .getCompilerHooks(compiler)
-      .receive.tap('afterTypeScriptCheck', (diagnostics, lints) => {
-        const allMsgs = [...diagnostics, ...lints];
-        const format = message =>
-          `${message.file}\n${typescriptFormatter(message, true)}`;
-
-        tsMessagesResolver({
-          errors: allMsgs.filter(msg => msg.severity === 'error').map(format),
-          warnings: allMsgs
-            .filter(msg => msg.severity === 'warning')
-            .map(format),
+    if (useTypeScript) {
+      compiler.hooks.beforeCompile.tap('beforeCompile', () => {
+        tsMessagesPromises[compilerIndex] = new Promise(resolve => {
+          tsMessagesResolver = msgs => resolve(msgs);
         });
       });
-  }
+
+      forkTsCheckerWebpackPlugin
+        .getCompilerHooks(compiler)
+        .receive.tap('afterTypeScriptCheck', (diagnostics, lints) => {
+          const allMsgs = [...diagnostics, ...lints];
+          const format = message =>
+            `${message.file}\n${typescriptFormatter(message, true)}`;
+
+          tsMessagesResolver({
+            errors: allMsgs.filter(msg => msg.severity === 'error').map(format),
+            warnings: allMsgs
+              .filter(msg => msg.severity === 'warning')
+              .map(format),
+          });
+        });
+    }
+  });
 
   // "done" event fires when Webpack has finished recompiling the bundle.
   // Whether or not you have warnings or errors, you will get this event.
-  compiler.hooks.done.tap('done', async stats => {
+  masterCompiler.hooks.done.tap('done', async stats => {
     if (isInteractive) {
       clearConsole();
     }
+
+    stats.compilation = {
+      errors: stats.stats.reduce(
+        (previousErrors, s) => [...previousErrors, ...s.compilation.errors],
+        []
+      ),
+      warnings: stats.stats.reduce(
+        (previousErrors, s) => [...previousErrors, ...s.compilation.warnings],
+        []
+      ),
+    };
 
     // We have switched off the default Webpack output in WebpackDevServer
     // options so we are going to "massage" the warnings and errors and present
@@ -188,7 +202,14 @@ function createCompiler({
         );
       }, 100);
 
-      const messages = await tsMessagesPromise;
+      const masterMessages = await Promise.all(tsMessagesPromises);
+      const messages = masterMessages.reduce(
+        (previousMessages, currentMessages) => ({
+          errors: [...previousMessages.errors, ...currentMessages.errors],
+          warnings: [...previousMessages.warnings, ...currentMessages.warnings],
+        }),
+        { errors: [], warnings: [] }
+      );
       clearTimeout(delayedMsg);
       statsData.errors.push(...messages.errors);
       statsData.warnings.push(...messages.warnings);
@@ -256,12 +277,12 @@ function createCompiler({
     arg => arg.indexOf('--smoke-test') > -1
   );
   if (isSmokeTest) {
-    compiler.hooks.failed.tap('smokeTest', async () => {
-      await tsMessagesPromise;
+    masterCompiler.hooks.failed.tap('smokeTest', async () => {
+      await Promise.all(tsMessagesPromises);
       process.exit(1);
     });
-    compiler.hooks.done.tap('smokeTest', async stats => {
-      await tsMessagesPromise;
+    masterCompiler.hooks.done.tap('smokeTest', async stats => {
+      await Promise.all(tsMessagesPromises);
       if (stats.hasErrors() || stats.hasWarnings()) {
         process.exit(1);
       } else {
@@ -270,7 +291,7 @@ function createCompiler({
     });
   }
 
-  return compiler;
+  return masterCompiler;
 }
 
 function resolveLoopback(proxy) {
