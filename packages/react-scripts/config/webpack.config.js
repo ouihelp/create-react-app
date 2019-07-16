@@ -679,6 +679,7 @@ module.exports = function(webpackEnv) {
     resolveLoader: originalConfig.resolveLoader,
     module: originalConfig.module,
     plugins: [
+      new webpack.DefinePlugin(env.stringified),
       useTypeScript &&
         new ForkTsCheckerWebpackPlugin({
           typescript: resolve.sync('typescript', {
