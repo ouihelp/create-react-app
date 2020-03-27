@@ -1,6 +1,6 @@
 {
-  "name": "react-scripts",
-  "version": "3.4.1",
+  "name": "@ouihelp/react-scripts",
+  "version": "3004001.0.1",
   "description": "Configuration and scripts for Create React App.",
   "repository": {
     "type": "git",
@@ -29,6 +29,7 @@
   "types": "./lib/react-app.d.ts",
   "dependencies": {
     "@babel/core": "7.9.0",
+    "@ouihelp/react-dev-utils": "10020001.0.1",
     "@svgr/webpack": "4.3.3",
     "@typescript-eslint/eslint-plugin": "^2.10.0",
     "@typescript-eslint/parser": "^2.10.0",
