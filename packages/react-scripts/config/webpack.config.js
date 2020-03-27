@@ -22,7 +22,6 @@ const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 const safePostCssParser = require('postcss-safe-parser');
 const ManifestPlugin = require('webpack-manifest-plugin');
 const InterpolateHtmlPlugin = require('react-dev-utils/InterpolateHtmlPlugin');
-const WorkboxWebpackPlugin = require('workbox-webpack-plugin');
 const WatchMissingNodeModulesPlugin = require('react-dev-utils/WatchMissingNodeModulesPlugin');
 const ModuleScopePlugin = require('react-dev-utils/ModuleScopePlugin');
 const getCSSModuleLocalIdent = require('react-dev-utils/getCSSModuleLocalIdent');
@@ -138,7 +137,7 @@ module.exports = function(webpackEnv) {
     return loaders;
   };
 
-  return {
+  const originalConfig = {
     mode: isEnvProduction ? 'production' : isEnvDevelopment && 'development',
     // Stop compilation early in production
     bail: isEnvProduction,
@@ -246,6 +245,9 @@ module.exports = function(webpackEnv) {
             },
           },
           sourceMap: shouldUseSourceMap,
+          // We cheat on this one to avoid a bug on CI providers advertising
+          // overly high number of CPUs.
+          parallel: 4,
         }),
         // This is only used in production mode
         new OptimizeCSSAssetsPlugin({
@@ -654,24 +656,6 @@ module.exports = function(webpackEnv) {
       // https://github.com/jmblog/how-to-optimize-momentjs-with-webpack
       // You can remove this if you don't use Moment.js:
       new webpack.IgnorePlugin(/^\.\/locale$/, /moment$/),
-      // Generate a service worker script that will precache, and keep up to date,
-      // the HTML & assets that are part of the webpack build.
-      isEnvProduction &&
-        new WorkboxWebpackPlugin.GenerateSW({
-          clientsClaim: true,
-          exclude: [/\.map$/, /asset-manifest\.json$/],
-          importWorkboxFrom: 'cdn',
-          navigateFallback: paths.publicUrlOrPath + 'index.html',
-          navigateFallbackBlacklist: [
-            // Exclude URLs starting with /_, as they're likely an API call
-            new RegExp('^/_'),
-            // Exclude any URLs whose last part seems to be a file extension
-            // as they're likely a resource and not a SPA route.
-            // URLs containing a "?" character won't be blacklisted as they're likely
-            // a route with query params (e.g. auth callbacks).
-            new RegExp('/[^/?]+\\.[^/]+$'),
-          ],
-        }),
       // TypeScript type checking
       useTypeScript &&
         new ForkTsCheckerWebpackPlugin({
@@ -716,4 +700,59 @@ module.exports = function(webpackEnv) {
     // our own hints via the FileSizeReporter
     performance: false,
   };
+
+  const serviceWorkerConfig = {
+    target: 'webworker',
+    mode: originalConfig.mode,
+    bail: originalConfig.bail,
+    devtool: originalConfig.devtool,
+    entry: { 'service-worker': paths.appServiceWorkerJs },
+    output: {
+      path: originalConfig.output.path,
+      pathinfo: originalConfig.output.pathinfo,
+      filename: 'sw.js',
+      publicPath: originalConfig.output.publicPath,
+      devtoolModuleFilenameTemplate:
+        originalConfig.output.devtoolModuleFilenameTemplate,
+    },
+    optimization: {
+      minimize: originalConfig.optimization.minimize,
+      minimizer: originalConfig.optimization.minimizer,
+    },
+    resolve: originalConfig.resolve,
+    resolveLoader: originalConfig.resolveLoader,
+    module: originalConfig.module,
+    plugins: [
+      new webpack.DefinePlugin(env.stringified),
+      useTypeScript &&
+        new ForkTsCheckerWebpackPlugin({
+          typescript: resolve.sync('typescript', {
+            basedir: paths.appNodeModules,
+          }),
+          async: isEnvDevelopment,
+          useTypescriptIncrementalApi: true,
+          checkSyntacticErrors: true,
+          resolveModuleNameModule: process.versions.pnp
+            ? `${__dirname}/pnpTs.js`
+            : undefined,
+          resolveTypeReferenceDirectiveModule: process.versions.pnp
+            ? `${__dirname}/pnpTs.js`
+            : undefined,
+          tsconfig: paths.appTsConfig,
+          reportFiles: [
+            '**',
+            '!**/__tests__/**',
+            '!**/?(*.)(spec|test).*',
+            '!**/src/setupProxy.*',
+            '!**/src/setupTests.*',
+          ],
+          watch: paths.appSrc,
+          silent: true,
+          // The formatter is invoked directly in WebpackDevServerUtils during development
+          formatter: isEnvProduction ? typescriptFormatter : undefined,
+        }),
+    ].filter(Boolean),
+  };
+
+  return [originalConfig, serviceWorkerConfig];
 };
