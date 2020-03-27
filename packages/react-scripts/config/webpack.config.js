@@ -245,7 +245,9 @@ module.exports = function(webpackEnv) {
             },
           },
           sourceMap: shouldUseSourceMap,
-          parallel: false,
+          // We cheat on this one to avoid a bug on CI providers advertising
+          // overly high number of CPUs.
+          parallel: 4,
         }),
         // This is only used in production mode
         new OptimizeCSSAssetsPlugin({
