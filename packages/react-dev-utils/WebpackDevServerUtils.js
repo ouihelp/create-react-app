@@ -142,7 +142,7 @@ function createCompiler({
     let tsMessagesResolver;
     if (useTypeScript) {
       compiler.hooks.beforeCompile.tap('beforeCompile', () => {
-        tsMessagesPromise = new Promise(resolve => {
+        tsMessagesPromises[compilerIndex] = new Promise(resolve => {
           tsMessagesResolver = msgs => resolve(msgs);
         });
       });
@@ -162,7 +162,7 @@ function createCompiler({
           });
         });
     }
-  }
+  });
 
   // "done" event fires when webpack has finished recompiling the bundle.
   // Whether or not you have warnings or errors, you will get this event.
