@@ -166,7 +166,7 @@ function createCompiler({
 
   // "done" event fires when webpack has finished recompiling the bundle.
   // Whether or not you have warnings or errors, you will get this event.
-  compiler.hooks.done.tap('done', async stats => {
+  masterCompiler.hooks.done.tap('done', async stats => {
     if (isInteractive) {
       clearConsole();
     }
