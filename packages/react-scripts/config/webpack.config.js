@@ -358,6 +358,7 @@ module.exports = function (webpackEnv) {
           reactRefreshOverlayEntry,
         ]),
       ],
+      symlinks: false,
     },
     resolveLoader: {
       plugins: [
