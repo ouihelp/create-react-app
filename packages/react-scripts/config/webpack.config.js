@@ -50,6 +50,10 @@ const reactRefreshOverlayEntry = require.resolve(
   'react-dev-utils/refreshOverlayInterop'
 );
 
+// These two requirements are for our custom `InjectMainEntrypointManifestPlugin`.
+const { RawSource } = require('webpack-sources');
+const replaceAndUpdateSourceMap = require('workbox-build/build/lib/replace-and-update-source-map');
+
 // Some apps do not need the benefits of saving a web request, so not inlining the chunk
 // makes for a smoother build process.
 const shouldInlineRuntimeChunk = process.env.INLINE_RUNTIME_CHUNK !== 'false';
@@ -85,6 +89,44 @@ const hasJsxRuntime = (() => {
     return false;
   }
 })();
+
+
+// Custom Webpack plugin to stamp the main entrypoint list of files
+// into our service worker.
+// Inspired by workbox's `InjectManifestPlugin`.
+let mainEntrypointFilesPromiseResolver;
+const mainEntrypointFilesPromise = new Promise((resolve) => {mainEntrypointFilesPromiseResolver = resolve});
+
+class InjectMainEntrypointManifestPlugin {
+  apply(compiler) {
+    compiler.hooks.emit.tapPromise(
+        this.constructor.name,
+        (compilation) => this.handleEmit(compilation).catch(
+            (error) => compilation.errors.push(error)),
+    );
+  }
+
+  async handleEmit(compilation) {
+    const mainEntryPointFiles = await mainEntrypointFilesPromise;
+
+    const swFileName = "sw.js";
+    const swSrcmapFileName = "sw.js.map";
+
+    const swAsset = compilation.assets[swFileName];
+    const initialSWAssetString = swAsset.source();
+    const sourcemapAsset = compilation.assets[swSrcmapFileName];
+    const {source, map} = await replaceAndUpdateSourceMap({
+      jsFilename: swFileName,
+      originalMap: JSON.parse(sourcemapAsset.source()),
+      originalSource: initialSWAssetString,
+      replaceString: JSON.stringify(Object.values(mainEntryPointFiles)),
+      searchString: "__MAIN_ENTRYPOINT_FILES",
+    });
+
+    compilation.assets[swSrcmapFileName] = new RawSource(map);
+    compilation.assets[swFileName] = new RawSource(source);
+  }
+}
 
 // This is the production and development configuration.
 // It is focused on developer experience, fast rebuilds, and a minimal bundle.
@@ -697,6 +739,9 @@ module.exports = function (webpackEnv) {
             fileName => !fileName.endsWith('.map')
           );
 
+          // Give all files to our resolver.
+          mainEntrypointFilesPromiseResolver(manifestFiles);
+
           return {
             files: manifestFiles,
             entrypoints: entrypointFiles,
@@ -833,6 +878,7 @@ module.exports = function (webpackEnv) {
           // The formatter is invoked directly in WebpackDevServerUtils during development
           formatter: isEnvProduction ? typescriptFormatter : undefined,
         }),
+        new InjectMainEntrypointManifestPlugin(),
     ].filter(Boolean),
   };
 
