@@ -17,9 +17,7 @@ var gzipSize = require('gzip-size').sync;
 
 function canReadAsset(asset) {
   return (
-    /\.(js|css)$/.test(asset) &&
-    !/service-worker\.js/.test(asset) &&
-    !/precache-manifest\.[0-9a-f]+\.js/.test(asset)
+    /\.(js|css)$/.test(asset)
   );
 }
 
