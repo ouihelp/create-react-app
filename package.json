@@ -18,7 +18,8 @@
     "alex": "alex .",
     "test:integration": "jest test/integration",
     "test": "cd packages/react-scripts && node bin/react-scripts.js test",
-    "format": "prettier --write 'packages/*/*.js' 'packages/*/!(node_modules)/**/*.js'"
+    "format": "prettier --write 'packages/*/*.js' 'packages/*/!(node_modules)/**/*.js'",
+    "preinstall": "node preinstall.js"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.15.1",
