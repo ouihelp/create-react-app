@@ -110,9 +110,9 @@ function createCompiler({
 }) {
   // "Compiler" is a low-level interface to webpack.
   // It lets us listen to some events and provide our own custom messages.
-  let compiler;
+  let masterCompiler;
   try {
-    compiler = webpack(config);
+    masterCompiler = webpack(config);
   } catch (err) {
     console.log(chalk.red('Failed to compile.'));
     console.log();
@@ -125,7 +125,7 @@ function createCompiler({
   // recompiling a bundle. WebpackDevServer takes care to pause serving the
   // bundle, so if you refresh, it'll wait instead of serving the old one.
   // "invalid" is short for "bundle invalidated", it doesn't imply any errors.
-  compiler.hooks.invalid.tap('invalid', () => {
+  masterCompiler.hooks.invalid.tap('invalid', () => {
     if (isInteractive) {
       clearConsole();
     }
@@ -133,23 +133,24 @@ function createCompiler({
   });
 
   let isFirstCompile = true;
-  let tsMessagesPromise;
 
-  if (useTypeScript) {
-    forkTsCheckerWebpackPlugin
-      .getCompilerHooks(compiler)
-      .waiting.tap('awaitingTypeScriptCheck', () => {
-        console.log(
-          chalk.yellow(
-            'Files successfully emitted, waiting for typecheck results...'
-          )
-        );
-      });
-  }
+  masterCompiler.compilers.forEach(compiler => {
+    if (useTypeScript) {
+      forkTsCheckerWebpackPlugin
+        .getCompilerHooks(compiler)
+        .waiting.tap('awaitingTypeScriptCheck', () => {
+          console.log(
+            chalk.yellow(
+              'Files successfully emitted, waiting for typecheck results...'
+            )
+          );
+        });
+    }
+  });
 
   // "done" event fires when webpack has finished recompiling the bundle.
   // Whether or not you have warnings or errors, you will get this event.
-  compiler.hooks.done.tap('done', async stats => {
+  masterCompiler.hooks.done.tap('done', async stats => {
     if (isInteractive) {
       clearConsole();
     }
@@ -198,6 +199,7 @@ function createCompiler({
           chalk.underline(chalk.yellow('keywords')) +
           ' to learn more about each warning.'
       );
+
       console.log(
         'To ignore, add ' +
           chalk.cyan('// eslint-disable-next-line') +
@@ -206,27 +208,7 @@ function createCompiler({
     }
   });
 
-  // You can safely remove this after ejecting.
-  // We only use this block for testing of Create React App itself:
-  const isSmokeTest = process.argv.some(
-    arg => arg.indexOf('--smoke-test') > -1
-  );
-  if (isSmokeTest) {
-    compiler.hooks.failed.tap('smokeTest', async () => {
-      await tsMessagesPromise;
-      process.exit(1);
-    });
-    compiler.hooks.done.tap('smokeTest', async stats => {
-      await tsMessagesPromise;
-      if (stats.hasErrors() || stats.hasWarnings()) {
-        process.exit(1);
-      } else {
-        process.exit(0);
-      }
-    });
-  }
-
-  return compiler;
+  return masterCompiler;
 }
 
 function resolveLoopback(proxy) {

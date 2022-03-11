@@ -1,6 +1,6 @@
 {
   "name": "react-scripts",
-  "version": "5.0.0",
+  "version": "5000000.1",
   "description": "Configuration and scripts for Create React App.",
   "repository": {
     "type": "git",
@@ -29,6 +29,7 @@
   "types": "./lib/react-app.d.ts",
   "dependencies": {
     "@babel/core": "^7.16.0",
+    "@ouihelp/react-dev-utils": "12000000.1",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.3",
     "@svgr/webpack": "^5.5.0",
     "babel-jest": "^27.4.2",
@@ -74,7 +75,7 @@
     "webpack": "^5.64.4",
     "webpack-dev-server": "^4.6.0",
     "webpack-manifest-plugin": "^4.0.2",
-    "workbox-webpack-plugin": "^6.4.1"
+    "workbox-build": "5.1.4"
   },
   "devDependencies": {
     "react": "^17.0.2",

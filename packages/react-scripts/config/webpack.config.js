@@ -20,7 +20,6 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
 const InterpolateHtmlPlugin = require('react-dev-utils/InterpolateHtmlPlugin');
-const WorkboxWebpackPlugin = require('workbox-webpack-plugin');
 const ModuleScopePlugin = require('react-dev-utils/ModuleScopePlugin');
 const getCSSModuleLocalIdent = require('react-dev-utils/getCSSModuleLocalIdent');
 const ESLintPlugin = require('eslint-webpack-plugin');
@@ -54,6 +53,10 @@ const babelRuntimeRegenerator = require.resolve('@babel/runtime/regenerator', {
   paths: [babelRuntimeEntry],
 });
 
+// These two requirements are for our custom `InjectMainEntrypointManifestPlugin`.
+const { RawSource } = require('webpack-sources');
+const replaceAndUpdateSourceMap = require('workbox-build/build/lib/replace-and-update-source-map');
+
 // Some apps do not need the benefits of saving a web request, so not inlining the chunk
 // makes for a smoother build process.
 const shouldInlineRuntimeChunk = process.env.INLINE_RUNTIME_CHUNK !== 'false';
@@ -73,9 +76,6 @@ const useTailwind = fs.existsSync(
   path.join(paths.appPath, 'tailwind.config.js')
 );
 
-// Get the path to the uncompiled service worker (if it exists).
-const swSrc = paths.swSrc;
-
 // style files regexes
 const cssRegex = /\.css$/;
 const cssModuleRegex = /\.module\.css$/;
@@ -94,6 +94,45 @@ const hasJsxRuntime = (() => {
     return false;
   }
 })();
+
+// Custom Webpack plugin to stamp the main entrypoint list of files
+// into our service worker.
+// Inspired by workbox's `InjectManifestPlugin`.
+let mainEntrypointFilesPromiseResolver;
+const mainEntrypointFilesPromise = new Promise(resolve => {
+  mainEntrypointFilesPromiseResolver = resolve;
+});
+
+class InjectMainEntrypointManifestPlugin {
+  apply(compiler) {
+    compiler.hooks.emit.tapPromise(this.constructor.name, compilation =>
+      this.handleEmit(compilation).catch(error =>
+        compilation.errors.push(error)
+      )
+    );
+  }
+
+  async handleEmit(compilation) {
+    const mainEntryPointFiles = await mainEntrypointFilesPromise;
+
+    const swFileName = 'sw.js';
+    const swSrcmapFileName = 'sw.js.map';
+
+    const swAsset = compilation.assets[swFileName];
+    const initialSWAssetString = swAsset.source();
+    const sourcemapAsset = compilation.assets[swSrcmapFileName];
+    const { source, map } = await replaceAndUpdateSourceMap({
+      jsFilename: swFileName,
+      originalMap: JSON.parse(sourcemapAsset.source()),
+      originalSource: initialSWAssetString,
+      replaceString: JSON.stringify(Object.values(mainEntryPointFiles)),
+      searchString: '__MAIN_ENTRYPOINT_FILES',
+    });
+
+    compilation.assets[swSrcmapFileName] = new RawSource(map);
+    compilation.assets[swFileName] = new RawSource(source);
+  }
+}
 
 // This is the production and development configuration.
 // It is focused on developer experience, fast rebuilds, and a minimal bundle.
@@ -196,7 +235,7 @@ module.exports = function (webpackEnv) {
     return loaders;
   };
 
-  return {
+  const originalConfig = {
     target: ['browserslist'],
     mode: isEnvProduction ? 'production' : isEnvDevelopment && 'development',
     // Stop compilation early in production
@@ -343,6 +382,7 @@ module.exports = function (webpackEnv) {
           babelRuntimeRegenerator,
         ]),
       ],
+      symlinks: false,
     },
     module: {
       strictExportPresence: true,
@@ -685,6 +725,9 @@ module.exports = function (webpackEnv) {
             fileName => !fileName.endsWith('.map')
           );
 
+          // Give all files to our resolver.
+          mainEntrypointFilesPromiseResolver(manifestFiles);
+
           return {
             files: manifestFiles,
             entrypoints: entrypointFiles,
@@ -700,19 +743,6 @@ module.exports = function (webpackEnv) {
         resourceRegExp: /^\.\/locale$/,
         contextRegExp: /moment$/,
       }),
-      // Generate a service worker script that will precache, and keep up to date,
-      // the HTML & assets that are part of the webpack build.
-      isEnvProduction &&
-        fs.existsSync(swSrc) &&
-        new WorkboxWebpackPlugin.InjectManifest({
-          swSrc,
-          dontCacheBustURLsMatching: /\.[0-9a-f]{8}\./,
-          exclude: [/\.map$/, /asset-manifest\.json$/, /LICENSE/],
-          // Bump up the default maximum size (2mb) that's precached,
-          // to make lazy-loading failure scenarios less likely.
-          // See https://github.com/cra-template/pwa/issues/13#issuecomment-722667270
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        }),
       // TypeScript type checking
       useTypeScript &&
         new ForkTsCheckerWebpackPlugin({
@@ -791,4 +821,58 @@ module.exports = function (webpackEnv) {
     // our own hints via the FileSizeReporter
     performance: false,
   };
+
+  const serviceWorkerConfig = {
+    target: 'webworker',
+    mode: originalConfig.mode,
+    bail: originalConfig.bail,
+    devtool: originalConfig.devtool,
+    entry: { 'service-worker': paths.appServiceWorkerJs },
+    output: {
+      path: originalConfig.output.path,
+      pathinfo: originalConfig.output.pathinfo,
+      filename: 'sw.js',
+      publicPath: originalConfig.output.publicPath,
+      devtoolModuleFilenameTemplate:
+        originalConfig.output.devtoolModuleFilenameTemplate,
+    },
+    optimization: {
+      minimize: originalConfig.optimization.minimize,
+      minimizer: originalConfig.optimization.minimizer,
+    },
+    resolve: originalConfig.resolve,
+    resolveLoader: originalConfig.resolveLoader,
+    module: originalConfig.module,
+    plugins: [
+      new webpack.DefinePlugin(env.stringified),
+      useTypeScript &&
+        new ForkTsCheckerWebpackPlugin({
+          async: isEnvDevelopment,
+          typescript: resolve.sync('typescript', {
+            basedir: paths.appNodeModules,
+          }),
+          useTypescriptIncrementalApi: true,
+          checkSyntacticErrors: true,
+          resolveModuleNameModule: process.versions.pnp
+            ? `${__dirname}/pnpTs.js`
+            : undefined,
+          resolveTypeReferenceDirectiveModule: process.versions.pnp
+            ? `${__dirname}/pnpTs.js`
+            : undefined,
+          tsconfig: paths.appTsConfig,
+          reportFiles: [
+            '**',
+            '!**/__tests__/**',
+            '!**/?(*.)(spec|test).*',
+            '!**/src/setupProxy.*',
+            '!**/src/setupTests.*',
+          ],
+          watch: paths.appSrc,
+          silent: true,
+        }),
+      new InjectMainEntrypointManifestPlugin(),
+    ].filter(Boolean),
+  };
+
+  return [originalConfig, serviceWorkerConfig];
 };
