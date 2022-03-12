@@ -914,5 +914,78 @@ module.exports = function (webpackEnv) {
     ].filter(Boolean),
   };
 
-  return [originalConfig, serviceWorkerConfig];
+  const sharedWebWorkerConfig = {
+    target: 'webworker',
+    mode: originalConfig.mode,
+    bail: originalConfig.bail,
+    devtool: originalConfig.devtool,
+    entry: { 'shared-worker': paths.appServiceWorkerJs },
+    output: {
+      path: originalConfig.output.path,
+      pathinfo: originalConfig.output.pathinfo,
+      filename: 'shared-worker.js',
+      publicPath: originalConfig.output.publicPath,
+      devtoolModuleFilenameTemplate:
+        originalConfig.output.devtoolModuleFilenameTemplate,
+    },
+    optimization: {
+      minimize: originalConfig.optimization.minimize,
+      minimizer: originalConfig.optimization.minimizer,
+    },
+    resolve: originalConfig.resolve,
+    resolveLoader: originalConfig.resolveLoader,
+    module: originalConfig.module,
+    plugins: [
+      new webpack.DefinePlugin(env.stringified),
+      useTypeScript &&
+        new ForkTsCheckerWebpackPlugin({
+          async: isEnvDevelopment,
+          typescript: {
+            typescriptPath: resolve.sync('typescript', {
+              basedir: paths.appNodeModules,
+            }),
+            configOverwrite: {
+              compilerOptions: {
+                sourceMap: isEnvProduction
+                  ? shouldUseSourceMap
+                  : isEnvDevelopment,
+                skipLibCheck: true,
+                inlineSourceMap: false,
+                declarationMap: false,
+                noEmit: true,
+                incremental: true,
+                tsBuildInfoFile: paths.appTsBuildInfoFile,
+              },
+            },
+            context: paths.appPath,
+            diagnosticOptions: {
+              syntactic: true,
+            },
+            mode: 'write-references',
+            // profile: true,
+          },
+          issue: {
+            // This one is specifically to match during CI tests,
+            // as micromatch doesn't match
+            // '../cra-template-typescript/template/src/App.tsx'
+            // otherwise.
+            include: [
+              { file: '../**/src/**/*.{ts,tsx}' },
+              { file: '**/src/**/*.{ts,tsx}' },
+            ],
+            exclude: [
+              { file: '**/src/**/__tests__/**' },
+              { file: '**/src/**/?(*.){spec|test}.*' },
+              { file: '**/src/setupProxy.*' },
+              { file: '**/src/setupTests.*' },
+            ],
+          },
+          logger: {
+            infrastructure: 'silent',
+          },
+        }),
+    ].filter(Boolean),
+  };
+
+  return [originalConfig, serviceWorkerConfig, sharedWebWorkerConfig];
 };

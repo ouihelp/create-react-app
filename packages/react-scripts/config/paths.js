@@ -67,6 +67,7 @@ module.exports = {
   appHtml: resolveApp('public/index.html'),
   appIndexJs: resolveModule(resolveApp, 'src/index'),
   appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker.entry'),
+  appSharedWorkerJs: resolveModule(resolveApp, 'src/shared-worker.entry'),
   appPackageJson: resolveApp('package.json'),
   appSrc: resolveApp('src'),
   appTsConfig: resolveApp('tsconfig.json'),
@@ -93,6 +94,7 @@ module.exports = {
   appHtml: resolveApp('public/index.html'),
   appIndexJs: resolveModule(resolveApp, 'src/index'),
   appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker.entry'),
+  appSharedWorkerJs: resolveModule(resolveApp, 'src/shared-worker.entry'),
   appPackageJson: resolveApp('package.json'),
   appSrc: resolveApp('src'),
   appTsConfig: resolveApp('tsconfig.json'),
@@ -134,6 +136,10 @@ if (
     appServiceWorkerJs: resolveModule(
       resolveOwn,
       `${templatePath}/src/service-worker.entry`
+    ),
+    appSharedWorkerJs: resolveModule(
+      resolveOwn,
+      `${templatePath}/src/shared-worker.entry`
     ),
     appPackageJson: resolveOwn('package.json'),
     appSrc: resolveOwn(`${templatePath}/src`),
