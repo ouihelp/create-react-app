@@ -914,16 +914,16 @@ module.exports = function (webpackEnv) {
     ].filter(Boolean),
   };
 
-  const sharedWebWorkerConfig = {
+  const webworkerConfig = {
     target: 'webworker',
     mode: originalConfig.mode,
     bail: originalConfig.bail,
     devtool: originalConfig.devtool,
-    entry: { 'shared-worker': paths.appServiceWorkerJs },
+    entry: { webworker: paths.appWebworkerJs },
     output: {
       path: originalConfig.output.path,
       pathinfo: originalConfig.output.pathinfo,
-      filename: 'shared-worker.js',
+      filename: 'webworker.js',
       publicPath: originalConfig.output.publicPath,
       devtoolModuleFilenameTemplate:
         originalConfig.output.devtoolModuleFilenameTemplate,
@@ -987,5 +987,5 @@ module.exports = function (webpackEnv) {
     ].filter(Boolean),
   };
 
-  return [originalConfig, serviceWorkerConfig, sharedWebWorkerConfig];
+  return [originalConfig, serviceWorkerConfig, webworkerConfig];
 };
