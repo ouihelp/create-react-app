@@ -66,8 +66,14 @@ module.exports = {
   appPublic: resolveApp('public'),
   appHtml: resolveApp('public/index.html'),
   appIndexJs: resolveModule(resolveApp, 'src/index'),
-  appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker.entry'),
-  appWebworkerJs: resolveModule(resolveApp, 'src/webworker.entry'),
+  appServiceWorkerJs: resolveModule(
+    resolveApp,
+    'src/alternative-entrypoints/service-worker/entrypoint'
+  ),
+  appWebworkerJs: resolveModule(
+    resolveApp,
+    'src/alternative-entrypoints/webworker/entrypoint'
+  ),
   appPackageJson: resolveApp('package.json'),
   appSrc: resolveApp('src'),
   appTsConfig: resolveApp('tsconfig.json'),
@@ -93,8 +99,14 @@ module.exports = {
   appPublic: resolveApp('public'),
   appHtml: resolveApp('public/index.html'),
   appIndexJs: resolveModule(resolveApp, 'src/index'),
-  appServiceWorkerJs: resolveModule(resolveApp, 'src/service-worker.entry'),
-  appWebworkerJs: resolveModule(resolveApp, 'src/webworker.entry'),
+  appServiceWorkerJs: resolveModule(
+    resolveApp,
+    'src/alternative-entrypoints/service-worker/entrypoint'
+  ),
+  appWebworkerJs: resolveModule(
+    resolveApp,
+    'src/alternative-entrypoints/webworker/entrypoint'
+  ),
   appPackageJson: resolveApp('package.json'),
   appSrc: resolveApp('src'),
   appTsConfig: resolveApp('tsconfig.json'),
@@ -135,11 +147,11 @@ if (
     appIndexJs: resolveModule(resolveOwn, `${templatePath}/src/index`),
     appServiceWorkerJs: resolveModule(
       resolveOwn,
-      `${templatePath}/src/service-worker.entry`
+      `${templatePath}/src/alternative-entrypoints/service-worker/entrypoint`
     ),
     appWebworkerJs: resolveModule(
       resolveOwn,
-      `${templatePath}/src/webworker.entry`
+      `${templatePath}/src/alternative-entrypoints/webworker/entrypoint`
     ),
     appPackageJson: resolveOwn('package.json'),
     appSrc: resolveOwn(`${templatePath}/src`),
