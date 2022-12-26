@@ -1,5 +1,5 @@
 {
-  "name": "@ouihelp/react-dev-utils",
+  "name": "@ouihelp-npm/react-dev-utils",
   "version": "12000000.0.1",
   "description": "webpack utilities used by Create React App",
   "repository": {

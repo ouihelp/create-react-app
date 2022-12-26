@@ -1,5 +1,5 @@
 {
-  "name": "@ouihelp/react-scripts",
+  "name": "@ouihelp-npm/react-scripts",
   "version": "5000000.0.6",
   "description": "Configuration and scripts for Create React App.",
   "repository": {
@@ -29,7 +29,7 @@
   "types": "./lib/react-app.d.ts",
   "dependencies": {
     "@babel/core": "^7.16.0",
-    "@ouihelp/react-dev-utils": "12000000.0.1",
+    "@ouihelp-npm/react-dev-utils": "12000000.0.1",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.3",
     "@svgr/webpack": "^5.5.0",
     "babel-jest": "^27.4.2",
