@@ -22,7 +22,6 @@ const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
 const InterpolateHtmlPlugin = require('react-dev-utils/InterpolateHtmlPlugin');
 const ModuleScopePlugin = require('react-dev-utils/ModuleScopePlugin');
 const getCSSModuleLocalIdent = require('react-dev-utils/getCSSModuleLocalIdent');
-const ESLintPlugin = require('eslint-webpack-plugin');
 const paths = require('./paths');
 const modules = require('./modules');
 const getClientEnvironment = require('./env');
@@ -60,9 +59,6 @@ const replaceAndUpdateSourceMap = require('workbox-build/build/lib/replace-and-u
 // Some apps do not need the benefits of saving a web request, so not inlining the chunk
 // makes for a smoother build process.
 const shouldInlineRuntimeChunk = process.env.INLINE_RUNTIME_CHUNK !== 'false';
-
-const emitErrorsAsWarnings = process.env.ESLINT_NO_DEV_ERRORS === 'true';
-const disableESLintPlugin = process.env.DISABLE_ESLINT_PLUGIN === 'true';
 
 const imageInlineSizeLimit = parseInt(
   process.env.IMAGE_INLINE_SIZE_LIMIT || '10000'
@@ -105,22 +101,33 @@ const mainEntrypointFilesPromise = new Promise(resolve => {
 
 class InjectMainEntrypointManifestPlugin {
   apply(compiler) {
-    compiler.hooks.emit.tapPromise(this.constructor.name, compilation =>
-      this.handleEmit(compilation).catch(error =>
-        compilation.errors.push(error)
-      )
+    compiler.hooks.compilation.tap(
+      'InjectMainEntrypointManifestPlugin',
+      compilation => {
+        compilation.hooks.processAssets.tapPromise(
+          {
+            name: 'InjectMainEntrypointManifestPlugin',
+            stage: webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_HASH,
+          },
+          assets =>
+            this.handleEmit(assets).catch(error =>
+              compilation.errors.push(error)
+            )
+        );
+      }
     );
   }
 
-  async handleEmit(compilation) {
+  async handleEmit(assets) {
     const mainEntryPointFiles = await mainEntrypointFilesPromise;
 
     const swFileName = 'sw.js';
     const swSrcmapFileName = 'sw.js.map';
 
-    const swAsset = compilation.assets[swFileName];
+    const swAsset = assets[swFileName];
     const initialSWAssetString = swAsset.source();
-    const sourcemapAsset = compilation.assets[swSrcmapFileName];
+
+    const sourcemapAsset = assets[swSrcmapFileName];
     const { source, map } = await replaceAndUpdateSourceMap({
       jsFilename: swFileName,
       originalMap: JSON.parse(sourcemapAsset.source()),
@@ -129,8 +136,8 @@ class InjectMainEntrypointManifestPlugin {
       searchString: '__MAIN_ENTRYPOINT_FILES',
     });
 
-    compilation.assets[swSrcmapFileName] = new RawSource(map);
-    compilation.assets[swFileName] = new RawSource(source);
+    assets[swSrcmapFileName] = new RawSource(map);
+    assets[swFileName] = new RawSource(source);
   }
 }
 
@@ -789,31 +796,6 @@ module.exports = function (webpackEnv) {
           },
           logger: {
             infrastructure: 'silent',
-          },
-        }),
-      !disableESLintPlugin &&
-        new ESLintPlugin({
-          // Plugin options
-          extensions: ['js', 'mjs', 'jsx', 'ts', 'tsx'],
-          formatter: require.resolve('react-dev-utils/eslintFormatter'),
-          eslintPath: require.resolve('eslint'),
-          failOnError: !(isEnvDevelopment && emitErrorsAsWarnings),
-          context: paths.appSrc,
-          cache: true,
-          cacheLocation: path.resolve(
-            paths.appNodeModules,
-            '.cache/.eslintcache'
-          ),
-          // ESLint class options
-          cwd: paths.appPath,
-          resolvePluginsRelativeTo: __dirname,
-          baseConfig: {
-            extends: [require.resolve('eslint-config-react-app/base')],
-            rules: {
-              ...(!hasJsxRuntime && {
-                'react/react-in-jsx-scope': 'error',
-              }),
-            },
           },
         }),
     ].filter(Boolean),
