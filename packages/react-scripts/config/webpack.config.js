@@ -20,10 +20,8 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
 const InterpolateHtmlPlugin = require('react-dev-utils/InterpolateHtmlPlugin');
-const WorkboxWebpackPlugin = require('workbox-webpack-plugin');
 const ModuleScopePlugin = require('react-dev-utils/ModuleScopePlugin');
 const getCSSModuleLocalIdent = require('react-dev-utils/getCSSModuleLocalIdent');
-const ESLintPlugin = require('eslint-webpack-plugin');
 const paths = require('./paths');
 const modules = require('./modules');
 const getClientEnvironment = require('./env');
@@ -54,12 +52,13 @@ const babelRuntimeRegenerator = require.resolve('@babel/runtime/regenerator', {
   paths: [babelRuntimeEntry],
 });
 
+// These two requirements are for our custom `InjectMainEntrypointManifestPlugin`.
+const { RawSource } = require('webpack-sources');
+const replaceAndUpdateSourceMap = require('workbox-build/build/lib/replace-and-update-source-map');
+
 // Some apps do not need the benefits of saving a web request, so not inlining the chunk
 // makes for a smoother build process.
 const shouldInlineRuntimeChunk = process.env.INLINE_RUNTIME_CHUNK !== 'false';
-
-const emitErrorsAsWarnings = process.env.ESLINT_NO_DEV_ERRORS === 'true';
-const disableESLintPlugin = process.env.DISABLE_ESLINT_PLUGIN === 'true';
 
 const imageInlineSizeLimit = parseInt(
   process.env.IMAGE_INLINE_SIZE_LIMIT || '10000'
@@ -72,9 +71,6 @@ const useTypeScript = fs.existsSync(paths.appTsConfig);
 const useTailwind = fs.existsSync(
   path.join(paths.appPath, 'tailwind.config.js')
 );
-
-// Get the path to the uncompiled service worker (if it exists).
-const swSrc = paths.swSrc;
 
 // style files regexes
 const cssRegex = /\.css$/;
@@ -94,6 +90,56 @@ const hasJsxRuntime = (() => {
     return false;
   }
 })();
+
+// Custom Webpack plugin to stamp the main entrypoint list of files
+// into our service worker.
+// Inspired by workbox's `InjectManifestPlugin`.
+let mainEntrypointFilesPromiseResolver;
+const mainEntrypointFilesPromise = new Promise(resolve => {
+  mainEntrypointFilesPromiseResolver = resolve;
+});
+
+class InjectMainEntrypointManifestPlugin {
+  apply(compiler) {
+    compiler.hooks.compilation.tap(
+      'InjectMainEntrypointManifestPlugin',
+      compilation => {
+        compilation.hooks.processAssets.tapPromise(
+          {
+            name: 'InjectMainEntrypointManifestPlugin',
+            stage: webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_HASH,
+          },
+          assets =>
+            this.handleEmit(assets).catch(error =>
+              compilation.errors.push(error)
+            )
+        );
+      }
+    );
+  }
+
+  async handleEmit(assets) {
+    const mainEntryPointFiles = await mainEntrypointFilesPromise;
+
+    const swFileName = 'sw.js';
+    const swSrcmapFileName = 'sw.js.map';
+
+    const swAsset = assets[swFileName];
+    const initialSWAssetString = swAsset.source();
+
+    const sourcemapAsset = assets[swSrcmapFileName];
+    const { source, map } = await replaceAndUpdateSourceMap({
+      jsFilename: swFileName,
+      originalMap: JSON.parse(sourcemapAsset.source()),
+      originalSource: initialSWAssetString,
+      replaceString: JSON.stringify(Object.values(mainEntryPointFiles)),
+      searchString: '__MAIN_ENTRYPOINT_FILES',
+    });
+
+    assets[swSrcmapFileName] = new RawSource(map);
+    assets[swFileName] = new RawSource(source);
+  }
+}
 
 // This is the production and development configuration.
 // It is focused on developer experience, fast rebuilds, and a minimal bundle.
@@ -196,7 +242,7 @@ module.exports = function (webpackEnv) {
     return loaders;
   };
 
-  return {
+  const originalConfig = {
     target: ['browserslist'],
     mode: isEnvProduction ? 'production' : isEnvDevelopment && 'development',
     // Stop compilation early in production
@@ -343,6 +389,7 @@ module.exports = function (webpackEnv) {
           babelRuntimeRegenerator,
         ]),
       ],
+      symlinks: false,
     },
     module: {
       strictExportPresence: true,
@@ -685,6 +732,9 @@ module.exports = function (webpackEnv) {
             fileName => !fileName.endsWith('.map')
           );
 
+          // Give all files to our resolver.
+          mainEntrypointFilesPromiseResolver(manifestFiles);
+
           return {
             files: manifestFiles,
             entrypoints: entrypointFiles,
@@ -700,19 +750,6 @@ module.exports = function (webpackEnv) {
         resourceRegExp: /^\.\/locale$/,
         contextRegExp: /moment$/,
       }),
-      // Generate a service worker script that will precache, and keep up to date,
-      // the HTML & assets that are part of the webpack build.
-      isEnvProduction &&
-        fs.existsSync(swSrc) &&
-        new WorkboxWebpackPlugin.InjectManifest({
-          swSrc,
-          dontCacheBustURLsMatching: /\.[0-9a-f]{8}\./,
-          exclude: [/\.map$/, /asset-manifest\.json$/, /LICENSE/],
-          // Bump up the default maximum size (2mb) that's precached,
-          // to make lazy-loading failure scenarios less likely.
-          // See https://github.com/cra-template/pwa/issues/13#issuecomment-722667270
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        }),
       // TypeScript type checking
       useTypeScript &&
         new ForkTsCheckerWebpackPlugin({
@@ -761,34 +798,176 @@ module.exports = function (webpackEnv) {
             infrastructure: 'silent',
           },
         }),
-      !disableESLintPlugin &&
-        new ESLintPlugin({
-          // Plugin options
-          extensions: ['js', 'mjs', 'jsx', 'ts', 'tsx'],
-          formatter: require.resolve('react-dev-utils/eslintFormatter'),
-          eslintPath: require.resolve('eslint'),
-          failOnError: !(isEnvDevelopment && emitErrorsAsWarnings),
-          context: paths.appSrc,
-          cache: true,
-          cacheLocation: path.resolve(
-            paths.appNodeModules,
-            '.cache/.eslintcache'
-          ),
-          // ESLint class options
-          cwd: paths.appPath,
-          resolvePluginsRelativeTo: __dirname,
-          baseConfig: {
-            extends: [require.resolve('eslint-config-react-app/base')],
-            rules: {
-              ...(!hasJsxRuntime && {
-                'react/react-in-jsx-scope': 'error',
-              }),
-            },
-          },
-        }),
     ].filter(Boolean),
     // Turn off performance processing because we utilize
     // our own hints via the FileSizeReporter
     performance: false,
+    ignoreWarnings: [
+      // Ignore warnings raised by source-map-loader.
+      // some third party packages may ship miss-configured sourcemaps, that interrupts the build
+      // See: https://github.com/facebook/create-react-app/discussions/11278#discussioncomment-1780169
+      /**
+       *
+       * @param {import('webpack').WebpackError} warning
+       * @returns {boolean}
+       */
+      function ignoreSourcemapsloaderWarnings(warning) {
+        return (
+          warning.module &&
+          warning.module.resource.includes('node_modules') &&
+          warning.details &&
+          warning.details.includes('source-map-loader')
+        );
+      },
+    ],
   };
+
+  const serviceWorkerConfig = {
+    target: 'webworker',
+    mode: originalConfig.mode,
+    bail: originalConfig.bail,
+    devtool: originalConfig.devtool,
+    entry: { 'service-worker': paths.appServiceWorkerJs },
+    output: {
+      path: originalConfig.output.path,
+      pathinfo: originalConfig.output.pathinfo,
+      filename: 'sw.js',
+      publicPath: originalConfig.output.publicPath,
+      devtoolModuleFilenameTemplate:
+        originalConfig.output.devtoolModuleFilenameTemplate,
+    },
+    optimization: {
+      minimize: originalConfig.optimization.minimize,
+      minimizer: originalConfig.optimization.minimizer,
+    },
+    resolve: originalConfig.resolve,
+    resolveLoader: originalConfig.resolveLoader,
+    module: originalConfig.module,
+    plugins: [
+      new webpack.DefinePlugin(env.stringified),
+      useTypeScript &&
+        new ForkTsCheckerWebpackPlugin({
+          async: isEnvDevelopment,
+          typescript: {
+            typescriptPath: resolve.sync('typescript', {
+              basedir: paths.appNodeModules,
+            }),
+            configOverwrite: {
+              compilerOptions: {
+                sourceMap: isEnvProduction
+                  ? shouldUseSourceMap
+                  : isEnvDevelopment,
+                skipLibCheck: true,
+                inlineSourceMap: false,
+                declarationMap: false,
+                noEmit: true,
+                incremental: true,
+                tsBuildInfoFile: paths.appTsBuildInfoFile,
+              },
+            },
+            context: paths.appPath,
+            diagnosticOptions: {
+              syntactic: true,
+            },
+            mode: 'write-references',
+            // profile: true,
+          },
+          issue: {
+            // This one is specifically to match during CI tests,
+            // as micromatch doesn't match
+            // '../cra-template-typescript/template/src/App.tsx'
+            // otherwise.
+            include: [
+              { file: '../**/src/**/*.{ts,tsx}' },
+              { file: '**/src/**/*.{ts,tsx}' },
+            ],
+            exclude: [
+              { file: '**/src/**/__tests__/**' },
+              { file: '**/src/**/?(*.){spec|test}.*' },
+              { file: '**/src/setupProxy.*' },
+              { file: '**/src/setupTests.*' },
+            ],
+          },
+          logger: {
+            infrastructure: 'silent',
+          },
+        }),
+      new InjectMainEntrypointManifestPlugin(),
+    ].filter(Boolean),
+  };
+
+  const webworkerConfig = {
+    target: 'webworker',
+    mode: originalConfig.mode,
+    bail: originalConfig.bail,
+    devtool: originalConfig.devtool,
+    entry: { webworker: paths.appWebworkerJs },
+    output: {
+      path: originalConfig.output.path,
+      pathinfo: originalConfig.output.pathinfo,
+      filename: 'webworker.js',
+      publicPath: originalConfig.output.publicPath,
+      devtoolModuleFilenameTemplate:
+        originalConfig.output.devtoolModuleFilenameTemplate,
+    },
+    optimization: {
+      minimize: originalConfig.optimization.minimize,
+      minimizer: originalConfig.optimization.minimizer,
+    },
+    resolve: originalConfig.resolve,
+    resolveLoader: originalConfig.resolveLoader,
+    module: originalConfig.module,
+    plugins: [
+      new webpack.DefinePlugin(env.stringified),
+      useTypeScript &&
+        new ForkTsCheckerWebpackPlugin({
+          async: isEnvDevelopment,
+          typescript: {
+            typescriptPath: resolve.sync('typescript', {
+              basedir: paths.appNodeModules,
+            }),
+            configOverwrite: {
+              compilerOptions: {
+                sourceMap: isEnvProduction
+                  ? shouldUseSourceMap
+                  : isEnvDevelopment,
+                skipLibCheck: true,
+                inlineSourceMap: false,
+                declarationMap: false,
+                noEmit: true,
+                incremental: true,
+                tsBuildInfoFile: paths.appTsBuildInfoFile,
+              },
+            },
+            context: paths.appPath,
+            diagnosticOptions: {
+              syntactic: true,
+            },
+            mode: 'write-references',
+            // profile: true,
+          },
+          issue: {
+            // This one is specifically to match during CI tests,
+            // as micromatch doesn't match
+            // '../cra-template-typescript/template/src/App.tsx'
+            // otherwise.
+            include: [
+              { file: '../**/src/**/*.{ts,tsx}' },
+              { file: '**/src/**/*.{ts,tsx}' },
+            ],
+            exclude: [
+              { file: '**/src/**/__tests__/**' },
+              { file: '**/src/**/?(*.){spec|test}.*' },
+              { file: '**/src/setupProxy.*' },
+              { file: '**/src/setupTests.*' },
+            ],
+          },
+          logger: {
+            infrastructure: 'silent',
+          },
+        }),
+    ].filter(Boolean),
+  };
+
+  return [originalConfig, serviceWorkerConfig, webworkerConfig];
 };
